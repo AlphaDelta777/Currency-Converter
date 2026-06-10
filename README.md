@@ -41,6 +41,7 @@ Presentation layers are cleanly decoupled from data handling strategies via netw
 
 ## 📦 Directory Manifesto
 
+```text
 ├── app_backend.py              # Headless Flask REST API Server & Matrix Database
 ├── Currency_Converter.py       # Stateless Streamlit Presentation & UI Engine
 ├── Test_Currency_Converter.py  # Comprehensive Pytest Suite with Mocking Stubs
