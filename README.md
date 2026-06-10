@@ -13,12 +13,31 @@ A high-performance, responsive Streamlit currency converter web application styl
 
 ---
 
-## 📂 Architecture & Layout
+## 📂 Architecture & Data Flow
 
 Presentation layers are cleanly decoupled from data handling strategies to prevent framework lock-in and streamline automated testing:
 
 ```text
-├── Currency_Converter.py       # Main Streamlit Application & UI Engine
+       [ User Interaction Layer ]
+                  │
+                  ▼ (Triggers Actions)
+       ┌──────────────────────┐
+       │ Currency_Converter   │◄───► [ Local State Cache ]
+       └──────────┬───────────┘
+                  │
+                  ├──────────────────────────────┐
+                  ▼ (Computes Rates)             ▼ (Persists Logs)
+       ┌──────────────────────┐       ┌──────────────────────┐
+       │ Singleton Exchange   │       │ history.json Ledger  │
+       └──────────────────────┘       └──────────────────────┘
+                  ▲                              ▲
+                  │ (Verifies Assertions)        │ (Validates IO)
+       ┌──────────┴──────────────────────────────┴──────────┐
+       │             Test_Currency_Converter.py             │
+       └────────────────────────────────────────────────────┘
+
+       ├── Currency_Converter.py       # Main Streamlit Application & UI Engine
 ├── Test_Currency_Converter.py  # Comprehensive Pytest Test Suite with Mock Stubs
 ├── .gitignore                  # Strict Repository Upload Filter File
-└── README.md                   # Project Documentation
+├── requirements.txt            # Unified Package Dependencies Manifest
+└── README.md                   # Project System Documentation
