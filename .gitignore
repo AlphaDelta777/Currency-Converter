@@ -1,5 +1,6 @@
 *
 !.gitignore
 !README.md
+!requirements.txt
 !Currency_Converter.py
 !Test_Currency_Converter.py

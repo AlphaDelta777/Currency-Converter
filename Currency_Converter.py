@@ -1,5 +1,3 @@
-"""Streamlit currency converter — financial-terminal UI."""
-
 import json
 import time
 import functools
