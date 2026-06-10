@@ -15,29 +15,36 @@ A high-performance, responsive Streamlit currency converter web application styl
 
 ## 📂 Architecture & Data Flow
 
-Presentation layers are cleanly decoupled from data handling strategies to prevent framework lock-in and streamline automated testing:
+Presentation layers are cleanly decoupled from data handling strategies via network-isolated REST endpoints to prevent framework lock-in and streamline automated testing:
 
-```text
-       [ User Interaction Layer ]
+       [ User Interface Layer ]
                   │
-                  ▼ (Triggers Actions)
-       ┌──────────────────────┐
-       │ Currency_Converter   │◄───► [ Local State Cache ]
-       └──────────┬───────────┘
-                  │
-                  ├──────────────────────────────┐
-                  ▼ (Computes Rates)             ▼ (Persists Logs)
-       ┌──────────────────────┐       ┌──────────────────────┐
-       │ Singleton Exchange   │       │ history.json Ledger  │
-       └──────────────────────┘       └──────────────────────┘
-                  ▲                              ▲
-                  │ (Verifies Assertions)        │ (Validates IO)
-       ┌──────────┴──────────────────────────────┴──────────┐
-       │             Test_Currency_Converter.py             │
-       └────────────────────────────────────────────────────┘
+                  ▼ (Triggers Conversion / History Views)
+       ┌────────────────────────┐
+       │   Currency_Converter   │ (Streamlit Frontend Client - Port 8501)
+       └───────────┬────────────┘
+                   │
+                   ▼ (HTTP Network Requests / JSON Data Contracts)
+       ┌────────────────────────┐
+       │      app_backend       │ (Flask REST API Engine - Port 8000)
+       └───────────┬────────────┘
+                   │
+                   ▼ (Persists Logs / Reads Ledger State)
+       ┌────────────────────────┐
+       │  history.json Ledger   │ (Flat-File Storage Database)
+       └────────────────────────┘
+                   ▲
+                   │ (Intercepts Network Boundary Assertions)
+       ┌───────────┴────────────┐
+       │Test_Currency_Converter │ (Pytest Suite with Network Mocking Stubs)
+       └────────────────────────┘
 
-       ├── Currency_Converter.py       # Main Streamlit Application & UI Engine
-├── Test_Currency_Converter.py  # Comprehensive Pytest Test Suite with Mock Stubs
-├── .gitignore                  # Strict Repository Upload Filter File
+## 📦 Directory Manifesto
+
+├── app_backend.py              # Headless Flask REST API Server & Matrix Database
+├── Currency_Converter.py       # Stateless Streamlit Presentation & UI Engine
+├── Test_Currency_Converter.py  # Comprehensive Pytest Suite with Mocking Stubs
+├── history.json                # Atomic Flat-File Database Storage (Auto-generated)
 ├── requirements.txt            # Unified Package Dependencies Manifest
+├── .gitignore                  # Strict Repository Upload Filter File
 └── README.md                   # Project System Documentation

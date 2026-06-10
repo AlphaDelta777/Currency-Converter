@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Any
 
 import streamlit as st
+import requests  # <-- Added for microservice network communication
 
 # ── Page config (must be first Streamlit call)
 st.set_page_config(
@@ -19,7 +20,7 @@ st.set_page_config(
 st.markdown(
     """
 <style>
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght=400;600&family=IBM+Plex+Sans:wght=400;600&display=swap');
 
 html, body, [class*="css"] { font-family: 'IBM Plex Sans', sans-serif; }
 
@@ -74,7 +75,9 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 AVAILABLE_CURRENCIES = ["USD", "EUR", "GBP", "JPY", "CHF", "CAD", "AUD", "CNY"]
-STORAGE_FILE = "history.json"
+
+# URL endpoint mapping for the backend Flask service
+BACKEND_URL = "http://127.0.0.1:8000/api"
 
 CURRENCY_NAMES: Dict[str, str] = {
     "USD": "US Dollar",
@@ -94,15 +97,11 @@ class CurrencyError(Exception):
 
 
 class APIConnectionError(CurrencyError):
-    """Raised when the exchange-rate API cannot return a valid rate."""
+    """Raised when the backend Flask API cannot connect or returns an error."""
 
 
 class ValidationError(CurrencyError):
-    """Raised when user input fails validation."""
-
-
-class PersistenceError(CurrencyError):
-    """Raised when file-system operations fail."""
+    """Raised when user input fails client or server-side validation."""
 
 
 # ── Decorator ─────────────────────────────────────────────────────────────────
@@ -124,198 +123,93 @@ def log_performance(func: Any) -> Any:
     return wrapper
 
 
-# ── API Client (singleton) ────────────────────────────────────────────────────
-class APIClient:
-    """Singleton providing a hardcoded exchange-rate matrix."""
-
-    _instance = None
-    MARKET_DATA: Dict[str, Dict[str, float]] = {
-        "USD": {
-            "EUR": 0.92,
-            "GBP": 0.79,
-            "JPY": 150.2,
-            "CHF": 0.91,
-            "CAD": 1.36,
-            "AUD": 1.52,
-            "CNY": 7.24,
-        },
-        "EUR": {
-            "USD": 1.09,
-            "GBP": 0.86,
-            "JPY": 163.5,
-            "CHF": 0.99,
-            "CAD": 1.48,
-            "AUD": 1.65,
-            "CNY": 7.85,
-        },
-        "GBP": {
-            "USD": 1.27,
-            "EUR": 1.16,
-            "JPY": 190.1,
-            "CHF": 1.15,
-            "CAD": 1.72,
-            "AUD": 1.91,
-            "CNY": 9.12,
-        },
-        "JPY": {
-            "USD": 0.0067,
-            "EUR": 0.0061,
-            "GBP": 0.0053,
-            "CHF": 0.0061,
-            "CAD": 0.0091,
-            "AUD": 0.010,
-            "CNY": 0.048,
-        },
-        "CHF": {
-            "USD": 1.10,
-            "EUR": 1.01,
-            "GBP": 0.87,
-            "JPY": 165.0,
-            "CAD": 1.49,
-            "AUD": 1.67,
-            "CNY": 7.90,
-        },
-        "CAD": {
-            "USD": 0.73,
-            "EUR": 0.67,
-            "GBP": 0.58,
-            "JPY": 110.2,
-            "CHF": 0.67,
-            "AUD": 1.11,
-            "CNY": 5.30,
-        },
-        "AUD": {
-            "USD": 0.66,
-            "EUR": 0.60,
-            "GBP": 0.52,
-            "JPY": 99.1,
-            "CHF": 0.60,
-            "CAD": 0.90,
-            "CNY": 4.75,
-        },
-        "CNY": {
-            "USD": 0.14,
-            "EUR": 0.13,
-            "GBP": 0.11,
-            "JPY": 20.8,
-            "CHF": 0.13,
-            "CAD": 0.19,
-            "AUD": 0.21,
-        },
-    }
-
-    def __new__(cls) -> "APIClient":
-        """Return the singleton instance, creating it on first call."""
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-        return cls._instance
-
-    def fetch_rate(self, src: str, dst: str) -> float:
-        """Return the exchange rate from *src* to *dst*, or 0.0 if unknown."""
-        return self.MARKET_DATA.get(src, {}).get(dst, 0.0)
-
-    def get_all_rates(self, src_base: str) -> Dict[str, float]:
-        """Return all rates for *src_base*, or an empty dict if unknown."""
-        return self.MARKET_DATA.get(src_base, {})
-
-
-# ── Transaction record dataclass ──────────────────────────────────────────────
-@dataclass
-class TransactionRecord:
-    """Holds the data for a single conversion transaction."""
-
-    from_currency: str
-    to_currency: str
-    amount: float
-    result: float
-    rate: float
-
-
-# ── Converter ─────────────────────────────────────────────────────────────────
+# ── Distributed Architecture Converter (Microservice Interface Client) ────────
 class AdvancedConverter:
-    """Handles conversions and JSON-file persistence."""
+    """Communicates with the background Flask REST API service for actions."""
 
-    def __init__(self, storage_file: str = STORAGE_FILE) -> None:
-        """Initialise with an APIClient and a path to the history file."""
-        self.api = APIClient()
-        self.storage_file = storage_file
+    def __init__(self, backend_url: str = BACKEND_URL) -> None:
+        """Initialize with target connection API address."""
+        self.backend_url = backend_url
 
     @log_performance
-    def convert(self, input_amount: float, src: str, dst: str) -> float:
-        """Convert *input_amount* from *src* to *dst* and persist the record."""
+    def convert(self, input_amount: float, src: str, dst: str) -> Dict[str, Any]:
+        """Request transaction calculation and log telemetry via backend API."""
         f_curr = src.upper()
         t_curr = dst.upper()
+        
         if f_curr not in AVAILABLE_CURRENCIES or t_curr not in AVAILABLE_CURRENCIES:
             raise ValidationError(
                 f"Invalid currency. Choose from: {AVAILABLE_CURRENCIES}"
             )
-        if f_curr == t_curr:
-            return round(input_amount, 2)
-        exchange_rate = self.api.fetch_rate(f_curr, t_curr)
-        if exchange_rate == 0.0:
-            raise APIConnectionError("Unsupported currency pair.")
-        converted = round(input_amount * exchange_rate, 2)
-        record = TransactionRecord(
-            from_currency=f_curr,
-            to_currency=t_curr,
-            amount=input_amount,
-            result=converted,
-            rate=exchange_rate,
-        )
-        self._record(record)
-        return converted
-
-    def _record(self, record: TransactionRecord) -> None:
-        """Append a TransactionRecord to the JSON history file."""
+            
+        params = {"source": f_curr, "target": t_curr, "amount": input_amount}
         try:
-            with open(self.storage_file, "a", encoding="utf-8") as file_handle:
-                json.dump(
-                    {
-                        "from": record.from_currency,
-                        "to": record.to_currency,
-                        "amt": record.amount,
-                        "res": record.result,
-                        "rate": record.rate,
-                    },
-                    file_handle,
-                )
-                file_handle.write("\n")
-        except IOError as err:
-            raise PersistenceError(f"I/O error: {err}") from err
+            response = requests.get(f"{self.backend_url}/convert", params=params, timeout=5)
+        except requests.exceptions.RequestException as err:
+            raise APIConnectionError(f"Flask Server is Offline: {err}")
 
-    def get_history(self, limit: int = 20) -> List[Dict[str, Any]]:
-        """Return the last *limit* transactions, most recent first."""
-        records: List[Dict[str, Any]] = []
-        if os.path.exists(self.storage_file):
-            with open(self.storage_file, "r", encoding="utf-8") as file_handle:
-                for line in file_handle:
-                    try:
-                        if line.strip():
-                            records.append(json.loads(line))
-                    except json.JSONDecodeError:
-                        continue
-        return list(reversed(records[-limit:]))
+        # DEFENSIVE CHECK: Ensure the server actually sent back JSON
+        try:
+            payload = response.json()
+        except ValueError:
+            raise APIConnectionError(f"Server returned non-JSON response (Status Code: {response.status_code}). Is the backend routing correct?")
+
+        if response.status_code != 200:
+            error_msg = payload.get("error", "Unknown server fault.")
+            raise ValidationError(error_msg)
+            
+        return payload
+
+    def get_history(self) -> List[Dict[str, Any]]:
+        """Retrieve audit history matrix logs streamed from the backend."""
+        try:
+            response = requests.get(f"{self.backend_url}/history", timeout=5)
+            if response.status_code == 200:
+                return response.json()
+        except requests.exceptions.RequestException:
+            pass  # Fail gracefully to keep UI stable if network times out
+        return []
+
+    def clear_history_remote(self) -> bool:
+        """Trigger backend endpoint to purge local history file data."""
+        try:
+            response = requests.delete(f"{self.backend_url}/history", timeout=5)
+            return response.status_code == 200
+        except requests.exceptions.RequestException:
+            return False
 
 
 # ── Helpers for rendering HTML tables ────────────────────────────────────────
-def build_rate_rows(rates: Dict[str, float]) -> str:
-    """Return HTML <tr> rows for the rate-snapshot table."""
-    return "".join(
-        f"<tr><td class='rate-accent'>{target}</td>"
-        f"<td>{CURRENCY_NAMES[target]}</td>"
-        f"<td style='text-align:right'>{rate_val:.4f}</td></tr>"
-        for target, rate_val in rates.items()
-    )
+def build_rate_rows(base_currency: str) -> str:
+    """Dynamically compile snapshot matrix by contacting the backend server."""
+    html_buffer = []
+    for target in AVAILABLE_CURRENCIES:
+        if target == base_currency:
+            rate_val = 1.0000
+        else:
+            try:
+                # Query flask endpoint safely for a unit baseline matrix rate
+                res = requests.get(f"{BACKEND_URL}/convert", params={"source": base_currency, "target": target, "amount": 1.0}, timeout=2)
+                rate_val = res.json().get('rate', 0.0) if res.status_code == 200 else 0.0
+            except Exception:
+                rate_val = 0.0
+                
+        html_buffer.append(
+            f"<tr><td class='rate-accent'>{target}</td>"
+            f"<td>{CURRENCY_NAMES[target]}</td>"
+            f"<td style='text-align:right'>{rate_val:.4f}</td></tr>"
+        )
+    return "".join(html_buffer)
 
 
 def build_history_rows(records: List[Dict[str, Any]]) -> str:
-    """Return HTML <tr> rows for the history table."""
+    """Return HTML <tr> rows for the history table from microservice logs."""
     return "".join(
         f"<tr>"
         f"<td>{rec.get('from', '—')}</td>"
         f"<td>{rec.get('to', '—')}</td>"
-        f"<td style='text-align:right'>{float(rec['amt']):,.2f}</td>"
-        f"<td style='text-align:right' class='rate-accent'>{float(rec['res']):,.2f}</td>"
+        f"<td style='text-align:right'>{float(rec.get('amt', 0)):,.2f}</td>"
+        f"<td style='text-align:right' class='rate-accent'>{float(rec.get('res', 0)):,.2f}</td>"
         f"<td style='text-align:right'>{rec.get('rate', '—')}</td>"
         f"</tr>"
         for rec in records
@@ -323,9 +217,9 @@ def build_history_rows(records: List[Dict[str, Any]]) -> str:
     )
 
 
-# ── Streamlit App ─────────────────────────────────────────────────────────────
-def render_convert_tab(app_converter: AdvancedConverter, app_api: APIClient) -> None:
-    """Render the Convert tab."""
+# ── Streamlit App Tabs ────────────────────────────────────────────────────────
+def render_convert_tab(app_converter: AdvancedConverter) -> None:
+    """Render the Convert tab targeting microservice workflows."""
     st.markdown("#### Enter conversion details")
     col1, col2 = st.columns(2)
     with col1:
@@ -348,18 +242,19 @@ def render_convert_tab(app_converter: AdvancedConverter, app_api: APIClient) -> 
     )
     if st.button("Convert", type="primary", use_container_width=True):
         try:
-            conv_result = app_converter.convert(sel_amount, sel_from, sel_to)
-            conv_rate = app_api.fetch_rate(sel_from, sel_to)
+            # Query backend service
+            payload = app_converter.convert(sel_amount, sel_from, sel_to)
+            
             st.markdown(
                 f"""
                 <div class="result-card">
-                    <div class="label">Converted amount</div>
+                    <div class="label">Converted amount (Via Flask API)</div>
                     <div class="amount">
-                        {conv_result:,.2f}
+                        {payload['res']:,.2f}
                         <span style="font-size:1.2rem;color:#7a9ab0">{sel_to}</span>
                     </div>
                     <div class="rate-note">
-                        1 {sel_from} = {conv_rate:.4f} {sel_to}
+                        1 {sel_from} = {payload['rate']:.4f} {sel_to}
                         &nbsp;·&nbsp; {sel_amount:,.2f} {sel_from} input
                     </div>
                 </div>
@@ -370,8 +265,8 @@ def render_convert_tab(app_converter: AdvancedConverter, app_api: APIClient) -> 
             st.markdown(f'<div class="err-box">⚠ {exc}</div>', unsafe_allow_html=True)
 
 
-def render_snapshot_tab(app_api: APIClient) -> None:
-    """Render the Rate Snapshot tab."""
+def render_snapshot_tab() -> None:
+    """Render the Rate Snapshot tab from cross-sectional network data."""
     st.markdown("#### Live rate matrix")
     snap_base = st.selectbox(
         "Base currency",
@@ -379,7 +274,7 @@ def render_snapshot_tab(app_api: APIClient) -> None:
         format_func=lambda c: f"{c} — {CURRENCY_NAMES[c]}",
         key="snapshot_base",
     )
-    rows_html = build_rate_rows(app_api.get_all_rates(snap_base))
+    rows_html = build_rate_rows(snap_base)
     st.markdown(
         f"""
         <table class="rate-table">
@@ -395,7 +290,7 @@ def render_snapshot_tab(app_api: APIClient) -> None:
 
 
 def render_history_tab(app_converter: AdvancedConverter) -> None:
-    """Render the History tab."""
+    """Render the History tab sourcing transaction streams from Flask."""
     st.markdown("#### Recent conversions")
     records = app_converter.get_history()
     if not records:
@@ -417,30 +312,32 @@ def render_history_tab(app_converter: AdvancedConverter) -> None:
         unsafe_allow_html=True,
     )
     if st.button("Clear history", type="secondary"):
-        if os.path.exists(STORAGE_FILE):
-            os.remove(STORAGE_FILE)
-        st.rerun()
+        if app_converter.clear_history_remote():
+            st.success("Remote ledger cleared successfully.")
+            st.rerun()
+        else:
+            st.error("Could not communicate clear request to server.")
 
 
 @st.cache_resource
 def get_converter() -> AdvancedConverter:
-    """Return a cached AdvancedConverter instance."""
+    """Return a cached AdvancedConverter gateway instance."""
     return AdvancedConverter()
 
 
+# ── System Orchestrator Execution ─────────────────────────────────────────────
 if __name__ == "__main__":
     APP_CONVERTER = get_converter()
-    APP_API = APIClient()
 
-    st.markdown('<p class="eyebrow">Enterprise FX</p>', unsafe_allow_html=True)
+    st.markdown('<p class="eyebrow">Enterprise FX Distributed Client</p>', unsafe_allow_html=True)
     st.title("Currency Converter")
 
     tab_convert, tab_snapshot, tab_history = st.tabs(
         ["Convert", "Rate Snapshot", "History"]
     )
     with tab_convert:
-        render_convert_tab(APP_CONVERTER, APP_API)
+        render_convert_tab(APP_CONVERTER)
     with tab_snapshot:
-        render_snapshot_tab(APP_API)
+        render_snapshot_tab()
     with tab_history:
         render_history_tab(APP_CONVERTER)
