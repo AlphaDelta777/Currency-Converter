@@ -4,7 +4,7 @@ import os
 
 app = Flask(__name__)
 
-# ── Expanded 8-Currency Matrix (Fixes the 0.0000 display bug) ─────────────────
+# ── Expanded 8-Currency Matrix ─────────────────
 EXCHANGE_RATES = {
     "USD": {"EUR": 0.92, "GBP": 0.79, "JPY": 156.50, "CAD": 1.37, "CHF": 0.89, "AUD": 1.51, "CNY": 7.25, "USD": 1.0},
     "EUR": {"USD": 1.09, "GBP": 0.86, "JPY": 170.10, "CAD": 1.49, "CHF": 0.96, "AUD": 1.64, "CNY": 7.89, "EUR": 1.0},
