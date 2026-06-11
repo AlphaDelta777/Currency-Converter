@@ -1,7 +1,13 @@
+# Ignore everything by default
 *
+
+# Whitelist your main configuration and test files
 !.gitignore
 !README.md
 !requirements.txt
-!Currency_Converter.py
+!pyproject.toml
 !Test_Currency_Converter.py
-!app_backend.py
+
+# Whitelist your new package folder and everything inside it
+!currency_service/
+!currency_service/**
