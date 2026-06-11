@@ -44,11 +44,11 @@ Presentation layers are cleanly decoupled from data handling strategies via netw
 
 ```text
 ├── currency_service/
-│   ├── __init__.py           # Identifies directory as an importable module
-│   ├── app_backend.py        # Headless Flask REST API Server & Matrix Database
-│   └── Currency_Converter.py # Stateless Streamlit Presentation & UI Engine
-├── Test_Currency_Converter.py# Comprehensive Pytest Suite with Mocking Stubs
-├── history.json              # Atomic Flat-File Database Storage (Auto-generated)
-├── pyproject.toml            # Modern PEP 517 build distribution configuration
-├── requirements.txt          # Unified Local Package Dependencies Manifest
-└── .gitignore                # Strict Repository Upload Filter File
+│   ├── __init__.py             # Identifies directory as an importable module
+│   ├── app_backend.py          # Headless Flask REST API Server & Matrix Database
+│   └── Currency_Converter.py   # Stateless Streamlit Presentation & UI Engine
+├── Test_Currency_Converter.py. # Comprehensive Pytest Suite with Mocking Stubs
+├── history.json                # Atomic Flat-File Database Storage (Auto-generated)
+├── pyproject.toml              # Modern PEP 517 build distribution configuration
+├── requirements.txt            # Unified Local Package Dependencies Manifest
+└── .gitignore                  # Strict Repository Upload Filter File
