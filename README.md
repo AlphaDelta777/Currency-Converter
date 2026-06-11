@@ -39,7 +39,6 @@ Presentation layers are cleanly decoupled from data handling strategies via netw
        │Test_Currency_Converter │ (Pytest Suite with Network Mocking Stubs)
        └────────────────────────┘
 
-## 📦 Directory Manifesto
 
 ## 📦 Directory Manifesto
 
