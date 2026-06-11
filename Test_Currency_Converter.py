@@ -10,7 +10,7 @@ _st_stub.tabs.return_value = (MagicMock(), MagicMock(), MagicMock())
 _st_stub.columns.return_value = (MagicMock(), MagicMock())
 sys.modules["streamlit"] = _st_stub
 
-from Currency_Converter import (  
+from currency_service.Currency_Converter import (  
     AdvancedConverter,
     ValidationError,
     APIConnectionError,
