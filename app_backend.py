@@ -17,7 +17,6 @@ DB_FILE = "history.json"
 
 def log_transaction(source, target, amount, result, rate):
     """Atomically appends transaction records to the flat-file ledger using Streamlit-compatible keys"""
-    # Changed keys to 'from', 'to', 'amt', 'res', 'rate' to match Streamlit's expectations
     record = {
         "from": source, 
         "to": target, 
@@ -43,11 +42,32 @@ def backend_home():
             "history_ledger": "/api/history"
         }
     })
-    
-    # Back-end persistence trigger (passing the rate along as well)
+
+@app.route('/api/convert', methods=['GET'])
+def convert_currency():
+    """Processes incoming conversion requests and updates data maps"""
+    source = request.args.get('source')
+    target = request.args.get('target')
+    amount_str = request.args.get('amount')
+
+    if not source or not target or not amount_str:
+        return jsonify({"error": "Missing required parameters"}), 400
+
+    try:
+        amount = float(amount_str)
+    except ValueError:
+        return jsonify({"error": "Invalid amount numeric value"}), 400
+
+    if source not in EXCHANGE_RATES or target not in EXCHANGE_RATES[source]:
+        return jsonify({"error": "Unsupported currency pair"}), 400
+
+    rate = EXCHANGE_RATES[source][target]
+    calculated = amount * rate
+
+    # Back-end persistence trigger
     log_transaction(source, target, amount, calculated, rate)
     
-    # MATCHING THE FRONTIER KEYS: This prevents the KeyError: 'res' in Streamlit
+    # MATCHING THE FRONTIER KEYS: This prevents the KeyError in Streamlit
     return jsonify({
         "from": source,
         "to": target,

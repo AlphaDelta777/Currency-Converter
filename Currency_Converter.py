@@ -1,3 +1,5 @@
+"""Streamlit Frontend Client for the Distributed Currency Converter Microservice System."""
+
 import json
 import time
 import functools
@@ -145,8 +147,11 @@ class AdvancedConverter:
         params = {"source": f_curr, "target": t_curr, "amount": input_amount}
         try:
             response = requests.get(f"{self.backend_url}/convert", params=params, timeout=5)
+            response.raise_for_status() # If you use status checks
         except requests.exceptions.RequestException as err:
-            raise APIConnectionError(f"Flask Server is Offline: {err}")
+            raise APIConnectionError(f"Flask Server is Offline: {err}") from err
+        except ValueError as exc:
+            raise APIConnectionError("Server returned non-JSON response.") from exc
 
         # DEFENSIVE CHECK: Ensure the server actually sent back JSON
         try:
