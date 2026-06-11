@@ -8,6 +8,6 @@
 !pyproject.toml
 !Test_Currency_Converter.py
 
-# Whitelist your new package folder and everything inside it
+# Whitelist package folder and everything inside it
 !currency_service/
 !currency_service/**
